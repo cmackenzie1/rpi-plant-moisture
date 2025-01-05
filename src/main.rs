@@ -1,9 +1,14 @@
-use i2cdev::core::I2CDevice;
-use i2cdev::linux::LinuxI2CDevice;
 use std::error::Error;
 use std::{thread, time::Duration};
 
-const DEFAULT_I2C_PATH: &str = "/dev/i2c-1";
+use axum::routing::get;
+use axum::Router;
+use clap::Parser;
+use hyper::header;
+use i2cdev::core::I2CDevice;
+use i2cdev::linux::LinuxI2CDevice;
+use lazy_static::lazy_static;
+use prometheus::{opts, register_gauge, Encoder, Gauge, TextEncoder};
 
 const SENSOR_ADDR: u16 = 0x36;
 
@@ -16,6 +21,16 @@ const TOUCH_READ: u8 = 0x10;
 // SAMD10 temperature sensor returns raw 32-bit fixed-point values
 // where each unit represents 1/65536 (≈0.00001525878) degrees Celsius.
 const TEMP_CONVERSION_FACTOR: f32 = 0.00001525878;
+
+lazy_static! {
+    static ref TEMPERATURE_GAUGE: Gauge =
+        register_gauge!(opts!("temperature", "Temperature in degrees celsius")).unwrap();
+    static ref MOISTURE_GAUGE: Gauge = register_gauge!(opts!(
+        "moisture",
+        "Soil moisture ranging from 200 (very dry) to 2000 (very wet)"
+    ))
+    .unwrap();
+}
 
 struct SoilSensor<T: I2CDevice> {
     i2c: T,
@@ -83,28 +98,74 @@ where
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<String> = std::env::args().collect();
-    let default_path = DEFAULT_I2C_PATH.to_string();
-    let i2c_path = args.get(1).unwrap_or(&default_path).as_str();
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, default_value = "/dev/i2c-1")]
+    device: String,
+    #[arg(short, long, default_value = "0.0.0.0:3000")]
+    metrics_addr: String,
+    #[arg(short, long)]
+    quiet: bool,
+    #[arg(short, long, default_value_t = 60)]
+    interval_seconds: u64,
+}
 
-    let i2c = LinuxI2CDevice::new(i2c_path, SENSOR_ADDR)?;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+
+    let i2c = LinuxI2CDevice::new(args.device, SENSOR_ADDR)?;
     let mut sensor = SoilSensor::new(i2c)?;
+
+    let app = Router::new().route(
+        "/metrics",
+        get(|| async {
+            let encoder = TextEncoder::new();
+            let mut buffer = vec![];
+            let metrics = prometheus::gather();
+            encoder.encode(&metrics, &mut buffer).unwrap();
+
+            (
+                [(header::CONTENT_TYPE, "text/plain")],
+                String::from_utf8(buffer).unwrap(),
+            )
+        }),
+    );
+
+    tokio::spawn(async move {
+        let addr = args.metrics_addr;
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        println!("Prometheus metrics are available at http://{addr}/metrics",);
+        axum::serve(listener, app).await.unwrap();
+    });
 
     println!("Starting soil sensor readings...");
 
     loop {
         match sensor.read_temperature() {
-            Ok(temp) => println!("Temperature: {:.2}°C", temp),
+            Ok(temp) => {
+                TEMPERATURE_GAUGE.set(temp.into());
+                if !args.quiet {
+                    println!("Temperature: {:.2}°C", temp)
+                }
+            }
             Err(e) => eprintln!("Error reading temperature: {}", e),
         }
 
         match sensor.read_moisture() {
-            Ok(moisture) => println!("Moisture: {} (200 - 2000)", moisture),
+            Ok(moisture) => {
+                MOISTURE_GAUGE.set(moisture.into());
+                if !args.quiet {
+                    println!("Moisture: {} (200 - 2000)", moisture)
+                }
+            }
             Err(e) => eprintln!("Error reading moisture: {}", e),
         }
 
-        println!("---");
-        thread::sleep(Duration::from_secs(1));
+        if !args.quiet {
+            println!("---");
+        }
+        thread::sleep(Duration::from_secs(args.interval_seconds));
     }
 }

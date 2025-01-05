@@ -17,19 +17,27 @@ Most of the code is based on the CircuitPython Seesaw library for the STEMMA Soi
 
 ## Usage
 
+If you are developing on the Pi itself, you can run the program using cargo
+
 ```bash
 # Run the program using cargo (assuming you are on the Raspberry Pi)
 cargo run
+```
 
-# or if you want to compile the binary elsewhere and run it on the Raspberry Pi
-# install the target for the Raspberry Pi Zero W 2 (aarch64)
+Otherwise, if you are cross-compiling from another machine, you'll need to install the build target
+
+```bash
 rustup target add aarch64-unknown-linux-gnu
 cargo build --release --target aarch64-unknown-linux-gnu
 # copy the binary to the Raspberry Pi
 scp target/aarch64-unknown-linux-gnu/release/rpi-plant-moisture <username>@<ip>:~/rpi-plant-moisture
 # run the binary on the Raspberry Pi via SSH
 ./rpi-plant-moisture
+```
 
+If everything is working, the output should look something like this:
+
+```text
 # Example output
 Starting soil sensor readings...
 Temperature: 25.68°C

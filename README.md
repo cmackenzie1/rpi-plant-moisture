@@ -6,6 +6,8 @@ If you haven't already, you'll need to enable I2C on your Raspberry Pi. You can 
 
 Most of the code is based on the CircuitPython Seesaw library for the STEMMA Soil Sensor. You can find the original code [here](https://github.com/adafruit/Adafruit_CircuitPython_seesaw).
 
+![rpi with sensor](static/IMG_3127.jpeg)
+
 ## Hardware
 
 - [Raspberry Pi Zero W 2](https://www.adafruit.com/product/5291)

@@ -57,7 +57,7 @@ where
         self.i2c.write(&command)?;
 
         // Wait for conversion
-        thread::sleep(Duration::from_millis(5));
+        thread::sleep(Duration::from_millis(10));
 
         // Read 4 bytes of temperature data
         let mut buf = [0u8; 4];
@@ -85,7 +85,7 @@ where
         self.i2c.write(&command)?;
 
         // Wait for conversion
-        thread::sleep(Duration::from_millis(5));
+        thread::sleep(Duration::from_millis(10));
 
         // Read 2 bytes of moisture data
         let mut buf = [0u8; 2];

@@ -8,6 +8,6 @@ clean:
 	cargo clean
 
 scp: build
-	scp ./target/aarch64-unknown-linux-gnu/release/rpi-plant-moisture cole@pi-callie.local:~/rpi-plant-moisture
+	rsync -avz ./target/aarch64-unknown-linux-gnu/release/rpi-plant-moisture cole@pi-callie.local:~/rpi-plant-moisture
 
 .PHONY: build test clean scp
